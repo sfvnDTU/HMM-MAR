@@ -1,4 +1,4 @@
-function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options,nperms)
+function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options, nperms, hmm_init)
 % Calculates the p-value of a permutation-test with H0 that 
 % the KL-divergence between the transition matrices is equal 
 % across the two groups specified
@@ -14,7 +14,8 @@ function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options,nper
 % options       structure with the training options - see documentation
 %               NB! Must include the 'grouping' option - only works for two
 %               groups atm...
-% nperms        integer specifiying number of 
+% nperms        number of permutations for null-distribution
+% hmm_init      inital hmm-solution without grouping (optional)
 %
 % OUTPUT
 % ??           < ?? A GULL ?? >         
@@ -24,6 +25,9 @@ function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options,nper
 %          Based on Diego Vidaurre's HMM-MAR toolbox
 %
 %%%%%%%%%%%%%%%%%%%%
+if nargin<5
+   hmm_init = []; 
+end
 
 % Check if grouping is specified
 if ~isfield(options, 'grouping')
@@ -51,7 +55,11 @@ kldist_null = nan(1,nperms);
 % initialization...
 grouping = options.grouping;
 options = rmfield(options, 'grouping');
-[hmm_init,Gamma_init,Xi_init]  = hmmmar(data,T,options); % first run without grouping
+if isempty(hmm_init)
+    [hmm_init,Gamma_init,Xi_init]  = hmmmar(data,T,options); % first run without grouping
+else
+    [Gamma_init, Xi_init] = hmmdecode(data,T,hmm_init,0);
+end
 
 % run with groupings
 hmm_init.train.grouping = grouping;
