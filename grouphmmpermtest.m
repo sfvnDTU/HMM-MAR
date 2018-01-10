@@ -72,7 +72,7 @@ end
 
 % Convert T to array
 if iscell(T)
-    T = [T{:}];
+    T = [T{:}]';
 end
 
 % run with groupings
