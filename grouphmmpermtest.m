@@ -61,6 +61,20 @@ else
     [Gamma_init, Xi_init] = hmmdecode(data,T,hmm_init,0);
 end
 
+% remove big-fields
+opt_field_names = fieldnames(options);
+fields_to_remove = strfind(opt_field_names, 'BIG');
+for f = 1:length(opt_field_names)
+    if fields_to_remove{f}
+        options = rmfield(options, opt_field_names{f});
+    end
+end
+
+% Convert T to array
+if iscell(T)
+    T = [T{:}];
+end
+
 % run with groupings
 hmm_init.train.grouping = grouping;
 hmm = hsupdate(Xi_init,Gamma_init,T,hmm_init); % update hmm object to have group transitions

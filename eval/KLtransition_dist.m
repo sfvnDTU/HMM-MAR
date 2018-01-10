@@ -1,12 +1,15 @@
-function KLdiv = KLtransition_dist(A1,A2)
-% Compute KL-divergence between to transition matrices with sufficient
-% statistics A1 and A2
+function [KLdiv,KLdiv_rowwise] = KLtransition_dist(A1,A2)
+% Compute symmetric KL-divergence between to transition matrices with 
+% sufficient statistics A1 and A2
 assert(all(size(A1)==size(A2)))
-KLdiv = 0; 
-% KL-divergence for transition prob
-K = size(A1,1);
-for k = 1:K
-    KLdiv = KLdiv + dirichlet_kl(A1(k,:),A2(k,:));
-end
 
+K = size(A1,1); % number of states
+KLdiv_rowwise = nan(K,1);
+for k = 1:K
+    kl12 = dirichlet_kl(A1(k,:),A2(k,:));
+    kl21 = dirichlet_kl(A2(k,:),A1(k,:));
+    KLdiv_rowwise(k) = (kl12+kl21)/2;
+end
+KLdiv = sum(KLdiv_rowwise);
+%eof
 end
