@@ -1,12 +1,8 @@
-function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options, nperms, hmm_init)
+function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options, nperms, hmm_init, verbose)
 % Calculates the p-value of a permutation-test with H0 that 
 % the KL-divergence between the transition matrices is equal 
 % across the two groups specified
 % See example of how to use the code in examples/run_grouppermtest.m
-%
-%  Dependencies: 
-%            Durga Lal Shrestha's invprctile script from MATLAB-central
-% https://se.mathworks.com/matlabcentral/fileexchange/41131-inverse-percentiles-of-a-sample
 %
 % INPUT
 % data          observations, either celled format or matrix (cf. hmmmar)
@@ -25,8 +21,14 @@ function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options, npe
 %          Based on Diego Vidaurre's HMM-MAR toolbox
 %
 %%%%%%%%%%%%%%%%%%%%
-if nargin<5
+if nargin < 6
+    verbose = 0;
+end
+if nargin<5 || isempty(hmm_init)
    hmm_init = []; 
+   K = options.K;
+else
+   K = hmm_init.K;
 end
 
 % Check if grouping is specified
@@ -48,7 +50,7 @@ end
 % TODO: Add checking of input data...
 
 % Initialize results
-kldist_null = nan(1,nperms);
+kldist_null = nan(K,nperms);
 
 %% HMM Inference
 
@@ -80,26 +82,29 @@ hmm_init.train.grouping = grouping;
 hmm = hsupdate(Xi_init,Gamma_init,T,hmm_init); % update hmm object to have group transitions
 [Gamma,~,Xi] = hsinference(data,T,hmm); % estimate relevant expectations
 hmm = hsupdate(Xi,Gamma,T,hmm); % update final transition matrices
-kldist = KLtransition_dist(hmm.Dir2d_alpha(:,:,1),hmm.Dir2d_alpha(:,:,2));
+[~, kldist] = KLtransition_dist(hmm.Dir2d_alpha(:,:,1),hmm.Dir2d_alpha(:,:,2)); % rowwise symmetric KL-dist
 
 
 %% Post-hoc HMM inference on permuted groups
 fprintf('Running permutations.... \n')
 options.verbose = 0;
-tic
 for per = 1:nperms
+    perm_start_tic = tic;
     options.grouping = grouping(randperm(length(grouping)));
     hmm_init.train.grouping = options.grouping;
     hmm_perm = hsupdate(Xi_init,Gamma_init,T,hmm_init); % update hmm object to have group transitions
     [Gamma,~,Xi] = hsinference(data,T,hmm_perm); % estimate relevant expectations
     hmm_perm = hsupdate(Xi,Gamma,T,hmm_perm); % update final transition matrices
-    kldist_null(per) = KLtransition_dist(hmm_perm.Dir2d_alpha(:,:,1),hmm_perm.Dir2d_alpha(:,:,2));
+    [~,kldist_null(:,per)] = KLtransition_dist(hmm_perm.Dir2d_alpha(:,:,1),hmm_perm.Dir2d_alpha(:,:,2));
+    perm_time = toc(perm_start_tic);
+    if verbose
+       fprintf('Permutation %i took %.4f seconds \n', per, perm_time) 
+    end
 end
-toc
 
-%% Calc p-val
-invp = invprctile(kldist_null, kldist);
-pval = (100-invp)/100;
-
+%% Calc p-val pr. state
+% Fraction of times null is smaller than actual kldist (pr. row)
+kl_lt = bsxfun(@lt, kldist_null, kldist); 
+pval = 1 - mean(kl_lt,2);
 %eof
 end
