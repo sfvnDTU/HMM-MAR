@@ -7,7 +7,7 @@ K = 3; % number of states in the model
 ndim = 4;
 Nsubs = 10; % number of subjects in each group
 T = 200*ones(1, Nsubs); % T for each of the two groups
-nperms = 1000;
+nperms = 10000;
 
 %% Simulate data
 hmmtrue = struct();
@@ -64,8 +64,12 @@ options.order = 0;
 
 [pval, kldist, kldist_null, hmm] = grouphmmpermtest(X,[T,T],options,nperms);
 
-
 % Plot null distribution
 figure,
-histogram(kldist_null), hold on
-line([kldist, kldist], get(gca,'YLim'),'Color',[1 0 0])
+for k = 1:hmm.K
+    subplot(1,hmm.K,k)
+    histogram(kldist_null(k,:)), hold on
+    line([kldist(k), kldist(k)], get(gca,'YLim'),'Color',[1 0 0])
+    hold off
+    title(sprintf('p: %d', pval(k)))
+end
