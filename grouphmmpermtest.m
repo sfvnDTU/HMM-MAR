@@ -12,15 +12,22 @@ function [pval, kldist, kldist_null, hmm] = grouphmmpermtest(data,T,options, npe
 %               groups atm...
 % nperms        number of permutations for null-distribution
 % hmm_init      inital hmm-solution without grouping (optional)
+% verbose       print time spent for each permutation (optional, default 0)
 %
 % OUTPUT
-% ??           < ?? A GULL ?? >         
-% ??           < ?? A GULL ?? >
+% pval          vector of length hmm.K (number of states) with the 
+%               empirical proportion times where the H0 could not be rejected         
+% kldist        vector of length hmm.K (number of states) with the
+%               symmetrized KL-divergence between the two groups
+% kldist_null   matrix (size K x nperms) with sym. KL-divergence for each
+%               transition row and for each permutation
+% hmm           hmm object from group inference ()
 %
 % Author: Søren Føns Vind Nielsen, CogSys, DTU (January, 2018)
 %          Based on Diego Vidaurre's HMM-MAR toolbox
 %
 %%%%%%%%%%%%%%%%%%%%
+rng('shuffle')
 if nargin < 6
     verbose = 0;
 end

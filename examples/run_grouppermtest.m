@@ -1,15 +1,23 @@
 %% Run Group HMM Permutation Test
-addpath('~/Documents/dynamic-brain/utils') % <- path to invprctile script used by main function
-clear
+% This script exemplifies how to use the Group-HMM permutation test
+% framework (cf. grouphmmpermtest.m)
+% The two groups are assumed to share the same state parameters (eg.
+% covariance matrices and mean-values), whereas the transition
+% probabilities between states varies over the groups. This script
+% generates some data with two groups that complies with the above
+% assumption and plots the null-distribution of the symmetrized KL-divergence
+% between each row of the transition matrices. 
 
 % Parameters
 K = 3; % number of states in the model
 ndim = 4;
 Nsubs = 10; % number of subjects in each group
-T = 200*ones(1, Nsubs); % T for each of the two groups
+T = 500*ones(1, Nsubs); % T for each of the two groups
 nperms = 10000;
 
 %% Simulate data
+
+% base hmm object
 hmmtrue = struct();
 hmmtrue.K = K;
 hmmtrue.state = struct();
@@ -47,7 +55,7 @@ hmm_2 = hmmtrue;
 hmm_2.P = transtrue(:,:,2);
 X2 = simhmmmar(T,hmm_2,[]);
 
-groups = [ones(1,Nsubs),2*ones(1,Nsubs)];
+groups = [ones(1,Nsubs),2*ones(1,Nsubs)]; % group assigments
 X = [X1;X2];
 
 
@@ -68,8 +76,19 @@ options.order = 0;
 figure,
 for k = 1:hmm.K
     subplot(1,hmm.K,k)
-    histogram(kldist_null(k,:)), hold on
+    hist(kldist_null(k,:)), hold on
     line([kldist(k), kldist(k)], get(gca,'YLim'),'Color',[1 0 0])
     hold off
-    title(sprintf('p: %d', pval(k)))
+    title(sprintf('state %i, p: %.3f',k,pval(k)))
+    xlabel('Sym. KL-div')
+end
+
+% Plot estimated transition matrix
+figure,
+for i = 1:size(hmm.P,3)
+    subplot(1,size(hmm.P,3),i)
+    imagesc(hmm.P(:,:,i), [0,1])
+    axis image
+    title(sprintf('Group %i', i))
+    colorbar
 end
