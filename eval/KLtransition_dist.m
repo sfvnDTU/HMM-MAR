@@ -1,5 +1,5 @@
 function [KLdiv,KLdiv_rowwise] = KLtransition_dist(A1,A2)
-% Compute symmetric KL-divergence between to transition matrices with 
+% Compute symmetric KL-divergence between two transition matrices with 
 % sufficient statistics A1 and A2
 assert(all(size(A1)==size(A2)))
 
