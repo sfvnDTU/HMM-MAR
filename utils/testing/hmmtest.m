@@ -24,6 +24,8 @@ function tests = hmmtest (Gamma,T,Tsubject,Y,options)
 %           (default 1, if there are at least 2 subjects)
 %   .confounds: (no. trials by q) matrix of confounds that are to be
 %           regressed out before doing the testing (default none)
+% options must also contain the training options for the HMM, used to
+% obtain Gamma
 % 
 % OUTPUTS:
 %
@@ -99,7 +101,6 @@ if ~isfield(options,'confounds'), confounds = [];
 else, confounds = options.confounds;
 end
 
-
 % Adjust dimensions of T and Tsubject
 if order>0 
     Tsubject = Tsubject - Ntrials_per_subject * order; 
@@ -121,10 +122,10 @@ if subjectlevel
         g = Gamma(t,:);
         jj = (1:Ntrials_per_subject(j)) + sum(Ntrials_per_subject(1:j-1));
         Yj = Y(jj,:);
-        fo = getFractionalOccupancy(g,TperSubj{j});
-        %lt = getStateLifeTimes(g,TperSubj{j},threshold_visit,threshold_Gamma);
-        %it = getStateIntervalTimes(g,TperSubj{j},threshold_visit,threshold_Gamma);
-        sr = getSwitchingRate(g,TperSubj{j});
+        fo = getFractionalOccupancy(g,TperSubj{j},options);
+        %lt = getStateLifeTimes(g,TperSubj{j},options,threshold_visit,threshold_Gamma);
+        %it = getStateIntervalTimes(g,TperSubj{j},options,threshold_visit,threshold_Gamma);
+        sr = getSwitchingRate(g,TperSubj{j},options);
         tests.subjectlevel.p_fractional_occupancy(:,j) = permtest(fo,Yj,Nperm,[],confounds);
         %tests.subjectlevel.p_life_times(:,j) = permtest(lt,Yj,Nperm,[],confounds);
         %tests.subjectlevel.p_interval_times(:,j) = permtest(it,Yj,Nperm,[],confounds);
@@ -137,10 +138,10 @@ if grouplevel
     if (length(T)==length(Tsubject)) 
         Ntrials_per_subject = [];
     end
-    fo = getFractionalOccupancy(Gamma,T);
-    %lt = getStateLifeTimes(Gamma,T,threshold_visit,threshold_Gamma);
-    %it = getStateIntervalTimes(Gamma,T,threshold_visit,threshold_Gamma);
-    sr = getSwitchingRate(Gamma,T);
+    fo = getFractionalOccupancy(Gamma,T,options);
+    %lt = getStateLifeTimes(Gamma,T,options,threshold_visit,threshold_Gamma);
+    %it = getStateIntervalTimes(Gamma,T,options,threshold_visit,threshold_Gamma);
+    sr = getSwitchingRate(Gamma,T,options);
     tests.grouplevel.p_fractional_occupancy = permtest(fo,Y,Nperm,Ntrials_per_subject,confounds);
     %tests.grouplevel.p_life_times(:,j) = permtest(lt,Y,Nperm,Ntrials_per_subject,confounds);
     %tests.grouplevel.p_interval_times(:,j) = permtest(it,Y,Nperm,Ntrials_per_subject,confounds);
@@ -164,10 +165,14 @@ function pval = permtest(X,D,Nperm,grouping,confounds)
 if nargin<4, grouping = []; end
 if (nargin>4) && ~isempty(confounds)
     confounds = confounds - repmat(mean(confounds),N,1);
+    X = bsxfun(@minus,X,mean(X));   
     X = X - confounds * pinv(confounds) * X;
+    D = bsxfun(@minus,D,mean(D));   
+    D = D - confounds * pinv(confounds) * D;    
 end
 
-X = X - repmat(mean(X),size(X,1),1);  
+D = bsxfun(@minus,D,mean(D));   
+X = bsxfun(@minus,X,mean(X));  
 grotperms = zeros(Nperm,p);
 proj = (D' * D + 0.001 * eye(size(D,2))) \ D';  
 
