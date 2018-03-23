@@ -48,19 +48,21 @@ function tests = hmmtest (Gamma,T,Tsubject,Y,options)
 % Put T,Tsubject in the format
 if iscell(T)
     if size(T,1)==1, T = T'; end
-    T = cell2mat(T);
+    T = single(cell2mat(T));
+else
+    T = single(T);
 end
 if iscell(Tsubject)
     if size(Tsubject,1)==1, Tsubject = Tsubject'; end
-    Tsubject = cell2mat(Tsubject);
+    Tsubject = single(cell2mat(Tsubject));
+else
+    Tsubject = single(Tsubject);
 end
 if size(T,1)==1, T = T'; end
-if size(Tsubject,1)==1, Tsubject = Tsubject'; end
-
 if isempty(Tsubject), Tsubject = sum(T); end  % One subject
+if size(Tsubject,1)==1, Tsubject = Tsubject'; end
 if sum(T) ~= sum(Tsubject), error('sum(T) must equal to sum(Tsubject)'); end
 N = length(T); Nsubj = length(Tsubject);
-order =  (sum(T) - size(Gamma,1)) / N;
 K = size(Gamma,2); % no. of states
 %threshold_visit = 3; % less that this no. of time point, a state visit is spurious
 %threshold_Gamma = (2/3); % threshold over which a state is deemed to be active
@@ -100,11 +102,22 @@ end
 if ~isfield(options,'confounds'), confounds = [];
 else, confounds = options.confounds;
 end
+if ~isfield(options,'downsample') || ~isfield(options,'Fs')
+    r = 1; 
+else
+    r = options.downsample/options.Fs;
+end
+
 
 % Adjust dimensions of T and Tsubject
-if order>0 
-    Tsubject = Tsubject - Ntrials_per_subject * order; 
-    T = T - order;
+if isfield(options,'order') && options.order > 0
+    Tsubject = ceil(r * Tsubject);
+    Tsubject = Tsubject - Ntrials_per_subject * options.order; 
+elseif isfield(options,'embeddedlags') && length(options.embeddedlags) > 1
+    d1 = -min(0,options.embeddedlags(1));
+    d2 = max(0,options.embeddedlags(end));
+    Tsubject = Tsubject - Ntrials_per_subject * (d1+d2); 
+    Tsubject = ceil(r * Tsubject);
 end
 
 tests = struct();
@@ -180,17 +193,19 @@ for perm=1:Nperm
     if perm==1
        Xin = X;
     else
-        if ~isempty(grouping)
-            Xin = zeros(size(X));
-            for gr = 1:length(grouping)
-                jj = (1:grouping(gr)) + sum(grouping(1:gr-1));
-                r = randperm(grouping(gr));
-                Xin(jj,:) = X(jj(r),:);
-            end
-        else
-            r = randperm(N);
-            Xin = X(r,:);
-        end
+        %if ~isempty(grouping)
+        %    Xin = zeros(size(X));
+        %    for gr = 1:length(grouping)
+        %        jj = (1:grouping(gr)) + sum(grouping(1:gr-1));
+        %        r = randperm(grouping(gr));
+        %        Xin(jj,:) = X(jj(r),:);
+        %    end
+        %else
+        %    r = randperm(N);
+        %    Xin = X(r,:);
+        %end
+        r = randperm(N);
+        Xin = X(r,:);
     end
     beta = proj * Xin;
     grotperms(perm,:) = sqrt(sum((D * beta - Xin).^2)); 
