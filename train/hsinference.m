@@ -1,4 +1,4 @@
-function [Gamma,Gammasum,Xi,LL,scale,B] = hsinference(data,T,hmm,residuals,options,XX)
+function [Gamma,Gammasum,Xi,LL,B] = hsinference(data,T,hmm,residuals,options,XX)
 %
 % inference engine for HMMs.
 %
@@ -59,7 +59,6 @@ end
 
 Gamma = cell(N,1);
 LL = zeros(N,1);
-scale = cell(N,1);
 Gammasum = zeros(N,K);
 Xi = cell(N,1);
 B = cell(N,1);
@@ -127,7 +126,7 @@ if hmm.train.useParallel==1 && N>1
     % to duplicate this code is really ugly but there doesn't seem to be
     % any other way - more Matlab's fault than mine
     parfor in = 1:N
-        Bt = []; sc = [];
+        Bt = [];  
         t0 = sum(T(1:in-1)); s0 = t0 - order*(in-1);
         if order>0
             C = [zeros(order,K); data.C(s0+1:s0+T(in)-order,:)];
@@ -154,7 +153,7 @@ if hmm.train.useParallel==1 && N>1
             end
             XXt = XX(slicer + s0 - order,:); 
             if isnan(C(t,1))
-                [gammat,xit,Bt,sc] = nodecluster(XXt,K,hmm,R(slicer,:),in);
+                [gammat,xit,Bt] = nodecluster(XXt,K,hmm,R(slicer,:),in);
             else
                 gammat = zeros(length(slicer),K);
                 if t==order+1, gammat(1,:) = C(slicer(1),:); end
@@ -165,7 +164,6 @@ if hmm.train.useParallel==1 && N>1
                     xit(i-1,:) = xitr(:)';
                 end
                 if n_argout>=4, Bt = obslike([],hmm,R(slicer,:),XXt,hmm.cache); end
-                if n_argout==5, sc = ones(length(slicer),1); end
             end
             if t>order+1
                 gammat = gammat(2:end,:);
@@ -174,7 +172,7 @@ if hmm.train.useParallel==1 && N>1
             gamma = [gamma; gammat];
             gammasum = gammasum + sum(gamma);
             if n_argout>=4, ll = ll + sum(sum(log(Bt(order+1:end,:)) .* gammat,2)); end
-            if n_argout>=5, scale = [scale; sc ]; end
+            if n_argout>=5, B{in} = [B{in}; Bt(order+1:end,:) ]; end
             if isempty(no_c), break;
             else, t = no_c(1)+t-1;
             end
@@ -189,7 +187,7 @@ if hmm.train.useParallel==1 && N>1
 else
     
     for in=1:N % this is exactly the same than the code above but changing parfor by for
-        Bt = []; sc = [];
+        Bt = [];  
         t0 = sum(T(1:in-1)); s0 = t0 - order*(in-1);
         if order>0
             C = [zeros(order,K); data.C(s0+1:s0+T(in)-order,:)];
@@ -216,7 +214,7 @@ else
             end
             XXt = XX(slicer + s0 - order,:);
             if isnan(C(t,1))
-                [gammat,xit,Bt,sc] = nodecluster(XXt,K,hmm,R(slicer,:),in);
+                [gammat,xit,Bt] = nodecluster(XXt,K,hmm,R(slicer,:),in);
                 if any(isnan(gammat(:)))
                     error('State time course inference returned NaN - Out of precision?')
                 end
@@ -230,7 +228,6 @@ else
                     xit(i-1,:) = xitr(:)';
                 end
                 if nargout>=4, Bt = obslike([],hmm,R(slicer,:),XXt,hmm.cache); end
-                if nargout==5, sc = ones(length(slicer),1); end
             end
             if t>order+1
                 gammat = gammat(2:end,:);
@@ -239,7 +236,7 @@ else
             gamma = [gamma; gammat];
             gammasum = gammasum + sum(gamma);
             if nargout>=4, ll = ll + sum(sum(log(Bt(order+1:end,:)) .* gammat,2)); end
-            if nargout>=5, scale = [scale; sc ]; end
+            if nargout>=5, B{in} = [B{in}; Bt(order+1:end,:) ]; end
             if isempty(no_c), break;
             else t = no_c(1)+t-1;
             end
@@ -254,25 +251,25 @@ end
 
 % join
 Gamma = cell2mat(Gamma);
-scale = cell2mat(scale);
 Xi = cell2mat(Xi);
-B  = cell2mat(B);
+if n_argout>=5, B  = cell2mat(B); end
 
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function [Gamma,Xi,L,scale] = nodecluster(XX,K,hmm,residuals,n)
+function [Gamma,Xi,L] = nodecluster(XX,K,hmm,residuals,n)
 % inference using normal foward backward propagation
 
 order = hmm.train.maxorder;
 T = size(residuals,1) + order;
 
-if isfield(hmm.train,'grouping') && length(unique(hmm.train.grouping))>1
-    i = hmm.train.grouping(n); 
-    P = hmm.P(:,:,i); Pi = hmm.Pi(:,i)'; 
-else 
-    P = hmm.P; Pi = hmm.Pi;
-end
+% if isfield(hmm.train,'grouping') && length(unique(hmm.train.grouping))>1
+%     i = hmm.train.grouping(n); 
+%     P = hmm.P(:,:,i); Pi = hmm.Pi(:,i)'; 
+% else 
+%     P = hmm.P; Pi = hmm.Pi;
+% end
+P = hmm.P; Pi = hmm.Pi;
 
 try
     L = obslike([],hmm,residuals,XX,hmm.cache);
