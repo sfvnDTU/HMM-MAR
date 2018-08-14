@@ -1,4 +1,4 @@
-function [results, hmm] = grouphmmpermtest(data,T,options, nperms, hmm_init, verbose)
+function [results, hmm] = grouphmmpermtest(data,T,options,grouping,nperms, hmm_init, verbose)
 % Calculates the p-value of a permutation-test with H0 that 
 % the KL-divergence between the transition matrices is equal 
 % across the two groups specified. Furthermore, it is tested if the initial
@@ -31,23 +31,18 @@ function [results, hmm] = grouphmmpermtest(data,T,options, nperms, hmm_init, ver
 %
 %%%%%%%%%%%%%%%%%%%%
 rng('shuffle')
-if nargin < 6
+if nargin < 7
     verbose = 0;
 end
-if nargin<5 || isempty(hmm_init)
+if nargin < 6 || isempty(hmm_init)
    hmm_init = []; 
    K = options.K;
 else
    K = hmm_init.K;
 end
 
-% Check if grouping is specified
-if ~isfield(options, 'grouping')
-    error('Please specify the grouping field in options...')
-end
-
 % Check for number of groups
-ngroups = numel(unique(options.grouping));
+ngroups = numel(unique(grouping(:)));
 if ngroups~=2
     error(['Test only works for two groups currently.', ...
         '# groups specfified: %i'], ngroups)
@@ -57,7 +52,13 @@ end
 if nperms < 1000
     warning('You are running a low number of permutations. Do not expect p-value to well estimated...')
 end
-% TODO: Add checking of input data...
+
+% Check that grouping variable complies with data
+if iscell(data)
+    assert( all(size(data) == size(grouping)) & all(size(data) == size(T)) )
+else
+    assert(length(grouping)==length(T))
+end
 
 % Initialize results
 kldist_null_trans = nan(K,nperms);
@@ -66,16 +67,24 @@ corr_null_trans = nan(1,nperms);
 corr_null_pi = nan(1,nperms);
 FO_group = nan(K,ngroups);
 FO_group_perm = nan(K,ngroups, nperms);
+P_perm = nan(K,K,ngroups,nperms);
+Pi_perm = nan(K,ngroups,nperms);
 
 %% HMM Inference
 
 % initialization...
-grouping = options.grouping;
-options = rmfield(options, 'grouping');
 if isempty(hmm_init)
-    [hmm_init,Gamma_init,Xi_init]  = hmmmar(data,T,options); % first run without grouping
+    if iscell(data)
+        [hmm_init,Gamma_init,Xi_init]  = hmmmar(data(:),T(:),options); % first run without grouping
+    else
+        [hmm_init,Gamma_init,Xi_init]  = hmmmar(data,T,options);
+    end
 else
-    [Gamma_init, Xi_init] = hmmdecode(data,T,hmm_init,0);
+    if iscell(data)
+        [Gamma_init, Xi_init] = hmmdecode(data(:),T(:),hmm_init,0);
+    else
+        [Gamma_init, Xi_init] = hmmdecode(data,T,hmm_init,0);
+    end
 end
 
 % remove big-fields
@@ -93,13 +102,15 @@ if iscell(T)
 end
 
 % run with groupings
-hmm_init.train.grouping = grouping;
+hmm_init.train.grouping = grouping(:);
 hmm = hsupdate(Xi_init,Gamma_init,T,hmm_init); % update hmm object to have group transitions
-[Gamma,~,Xi] = hsinference(data,T,hmm); % estimate relevant expectations
-FO = getFractionalOccupancy(Gamma,T);
+
+% Calc FO
+FO = getFractionalOccupancy(Gamma_init,T);
 FO_group(:,1) = mean(FO(grouping==1,:));
 FO_group(:,2) = mean(FO(grouping==2,:));
-hmm = hsupdate(Xi,Gamma,T,hmm); % update final transition matrices
+
+% Calc KL differences
 [~, kldist_trans] = KLtransition_dist(hmm.Dir2d_alpha(:,:,1),hmm.Dir2d_alpha(:,:,2)); % rowwise symmetric KL-dist
 kldist_pi = KLpi_dist(hmm.Dir_alpha(:,1),hmm.Dir_alpha(:,2));
 
@@ -107,30 +118,35 @@ kldist_pi = KLpi_dist(hmm.Dir_alpha(:,1),hmm.Dir_alpha(:,2));
 P1 = hmm.P(:,:,1); P2 = hmm.P(:,:,2);
 corr_trans = corr(P1(:), P2(:));
 corr_pi = corr(hmm.Pi(:,1), hmm.Pi(:,2));
-
+results.P.P = hmm.P;
+results.Pi.Pi = hmm.Pi;
 
 %% Post-hoc HMM inference on permuted groups
+if nperms > 0
 fprintf('Running permutations.... \n')
 options.verbose = 0;
 for per = 1:nperms
     perm_start_tic = tic;
-    options.grouping = grouping(randperm(length(grouping)));
-    hmm_init.train.grouping = options.grouping;
+    perm_grouping = grouping(:,randperm(size(grouping,2)));
+    hmm_init.train.grouping = perm_grouping(:);
     hmm_perm = hsupdate(Xi_init,Gamma_init,T,hmm_init); % update hmm object to have group transitions
-    [Gamma,~,Xi] = hsinference(data,T,hmm_perm); % estimate relevant expectations
-    hmm_perm = hsupdate(Xi,Gamma,T,hmm_perm); % update final transition matrices
+    
+    % Calculate stats on permuted groups
     [~,kldist_null_trans(:,per)] = KLtransition_dist(hmm_perm.Dir2d_alpha(:,:,1),hmm_perm.Dir2d_alpha(:,:,2));
     kldist_null_pi(per) = KLpi_dist(hmm.Dir_alpha(:,1),hmm.Dir_alpha(:,2));
     
     % Fractional occupancy
-    FO = getFractionalOccupancy(Gamma,T);
-    FO_group_perm(:,1,per) = mean(FO(options.grouping==1,:));
-    FO_group_perm(:,2,per) = mean(FO(options.grouping==2,:));
+    FO_group_perm(:,1,per) = mean(FO(hmm_init.train.grouping==1,:));
+    FO_group_perm(:,2,per) = mean(FO(hmm_init.train.grouping==2,:));
     
     % Correlation measures
     P1 = hmm_perm.P(:,:,1); P2 = hmm_perm.P(:,:,2);
     corr_null_trans(per) = corr(P1(:), P2(:));
     corr_null_pi(per) = corr(hmm_perm.Pi(:,1), hmm_perm.Pi(:,2));
+    
+    % Save transtion matrices and Pi vector
+    P_perm(:,:,:,per) = hmm_perm.P;
+    Pi_perm(:,:,per) = hmm_perm.Pi;
     
     % Timing
     perm_time = toc(perm_start_tic);
@@ -140,11 +156,21 @@ for per = 1:nperms
 end
 
 %% Calc p-val pr. state
-% Fraction of times null is smaller than actual kldist (pr. row)
-kl_lt = bsxfun(@lt, kldist_null_trans, kldist_trans); 
-pval_trans = 1 - mean(kl_lt,2);
+% Binomial confidence interval (95%) upper bound estimate of p-value
 
-pval_pi = 1 - mean(kldist_null_pi < kldist_pi);
+% Transition matrix
+kl_gt = bsxfun(@gt, kldist_null_trans, kldist_trans); 
+[~,pci] = binofit( sum(kl_gt,2), nperms);
+pval_trans = pci(:,2);
+
+[~,pci] = binofit( sum(kldist_null_pi > kldist_pi), nperms);
+pval_pi = pci(2);
+
+
+else
+   pval_pi = nan;
+   pval_trans = nan;  
+end
 
 %% Pack things together in a results struct
 % Transition matrix stats
@@ -153,6 +179,7 @@ results.P.KL_null = kldist_null_trans;
 results.P.KL_pval = pval_trans;
 results.P.corr = corr_trans;
 results.P.corr_null = corr_null_trans;
+results.P.P_perm = P_perm;
 
 % Pi stats
 results.Pi.KL = kldist_pi;
@@ -160,6 +187,7 @@ results.Pi.KL_null = kldist_null_pi;
 results.Pi.KL_pval = pval_pi;
 results.Pi.corr = corr_pi;
 results.Pi.corr_null = corr_null_pi;
+results.Pi.Pi_perm = Pi_perm;
 
 % FO stats
 results.FO.Avg = FO_group;

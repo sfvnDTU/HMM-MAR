@@ -67,10 +67,9 @@ options.K = K;
 options.covtype = 'full';
 options.zeromean = 0;
 options.standardise = 0;
-options.grouping = groups;
 options.order = 0;
 
-[perm_results, hmm] = grouphmmpermtest(X,[T,T],options,nperms);
+[perm_results, hmm] = grouphmmpermtest(X,[T,T],options,groups,nperms);
 
 % Plot null distribution
 figure,
@@ -79,7 +78,7 @@ for k = 1:hmm.K
     hist(perm_results.P.KL_null(k,:)), hold on
     line([perm_results.P.KL(k), perm_results.P.KL(k)], get(gca,'YLim'),'Color',[1 0 0])
     hold off
-    title(sprintf('state %i, p: %.3f',k,perm_results.P.KL_pval(k)))
+    title(sprintf('state %i, p: %d',k,perm_results.P.KL_pval(k)))
     xlabel('Sym. KL-div')
 end
 
